@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CNN Image Classifier - CIFAR-10</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🖼️ CNN Image Classifier</h1>
+            <p class="subtitle">Upload an image to classify using our trained CNN model</p>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <div class="upload-box" id="uploadBox">
+                    <input type="file" id="fileInput" accept="image/*" hidden>
+                    <div class="upload-content">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <p class="upload-text">Click to upload or drag and drop</p>
+                        <p class="upload-hint">PNG, JPG, GIF up to 10MB</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="preview-section" id="previewSection" style="display: none;">
+                <h2>Image Preview</h2>
+                <img id="imagePreview" alt="Preview">
+                <button class="btn btn-primary" id="predictBtn">Classify Image</button>
+            </div>
+
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <h2>Classification Results</h2>
+                <div class="prediction-card">
+                    <div class="predicted-class">
+                        <span class="label">Predicted Class:</span>
+                        <span class="value" id="predictedClass"></span>
+                    </div>
+                    <div class="confidence">
+                        <span class="label">Confidence:</span>
+                        <span class="value" id="confidence"></span>
+                    </div>
+                </div>
+
+                <div class="all-predictions">
+                    <h3>Top 3 Predictions</h3>
+                    <div id="allPredictions"></div>
+                </div>
+            </div>
+
+            <div class="loading" id="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Classifying image...</p>
+            </div>
+
+            <div class="error-message" id="errorMessage" style="display: none;"></div>
+        </main>
+
+        <footer>
+            <div class="class-info">
+                <h3>CIFAR-10 Classes</h3>
+                <div class="class-grid">
+                    <span class="class-badge">✈️ Airplane</span>
+                    <span class="class-badge">🚗 Automobile</span>
+                    <span class="class-badge">🐦 Bird</span>
+                    <span class="class-badge">🐱 Cat</span>
+                    <span class="class-badge">🦌 Deer</span>
+                    <span class="class-badge">🐕 Dog</span>
+                    <span class="class-badge">🐸 Frog</span>
+                    <span class="class-badge">🐴 Horse</span>
+                    <span class="class-badge">🚢 Ship</span>
+                    <span class="class-badge">🚚 Truck</span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        const uploadBox = document.getElementById('uploadBox');
+        const fileInput = document.getElementById('fileInput');
+        const previewSection = document.getElementById('previewSection');
+        const imagePreview = document.getElementById('imagePreview');
+        const predictBtn = document.getElementById('predictBtn');
+        const resultsSection = document.getElementById('resultsSection');
+        const loading = document.getElementById('loading');
+        const errorMessage = document.getElementById('errorMessage');
+
+        // Click to upload
+        uploadBox.addEventListener('click', () => fileInput.click());
+
+        // Drag and drop
+        uploadBox.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadBox.classList.add('dragover');
+        });
+
+        uploadBox.addEventListener('dragleave', () => {
+            uploadBox.classList.remove('dragover');
+        });
+
+        uploadBox.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadBox.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showError('Please upload an image file');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagePreview.src = e.target.result;
+                previewSection.style.display = 'block';
+                resultsSection.style.display = 'none';
+                errorMessage.style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        predictBtn.addEventListener('click', async () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            loading.style.display = 'block';
+            resultsSection.style.display = 'none';
+            errorMessage.style.display = 'none';
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Classification failed');
+                }
+
+                displayResults(data);
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+
+        function displayResults(data) {
+            document.getElementById('predictedClass').textContent = data.predicted_class;
+            document.getElementById('confidence').textContent = `${data.confidence.toFixed(2)}%`;
+
+            const allPredictionsDiv = document.getElementById('allPredictions');
+            allPredictionsDiv.innerHTML = data.all_predictions.map(pred => `
+                <div class="prediction-bar">
+                    <div class="prediction-label">${pred.class}</div>
+                    <div class="bar-container">
+                        <div class="bar-fill" style="width: ${pred.confidence}%"></div>
+                    </div>
+                    <div class="prediction-value">${pred.confidence.toFixed(2)}%</div>
+                </div>
+            `).join('');
+
+            resultsSection.style.display = 'block';
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            setTimeout(() => {
+                errorMessage.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
